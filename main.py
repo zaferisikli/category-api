@@ -75,8 +75,16 @@ def category_recommend(request: CategoryRequest):
         })
 
     
+    #output = []
+    #for plat in ["Hepsiburada", "Trendyol", "N11"]:
+        #output.extend(grouped_results.get(plat, []))
+
+    #return output
+     # Bu iki satırı eski kodun yerine yapıştır:
+    other_platforms = [p for p in ["Hepsiburada", "Trendyol", "N11"] if p != request.platform]
+
     output = []
-    for plat in ["Hepsiburada", "Trendyol", "N11"]:
+    for plat in other_platforms:
         output.extend(grouped_results.get(plat, []))
 
-    return output
+    return output  
