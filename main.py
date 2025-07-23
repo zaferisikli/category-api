@@ -3,8 +3,18 @@ from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue, SearchRequest
 from collections import defaultdict
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+# CORS middleware ekle
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Gerekirse buraya sadece frontend URL'ini yazabilirsin
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def root():
