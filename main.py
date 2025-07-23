@@ -6,6 +6,10 @@ from collections import defaultdict
 
 app = FastAPI()
 
+@app.get("/")
+def root():
+    return {"status": "API is running"}
+
 # Qdrant bağlantısı (gerekirse host ve port değiştir)
 
 client = QdrantClient(
