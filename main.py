@@ -1,46 +1,40 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue, SearchRequest
-from collections import defaultdict
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# CORS middleware ekle
+# CORS ayarları
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Gerekirse buraya sadece frontend URL'ini yazabilirsin
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Sağlık kontrol endpoint'i
 @app.get("/")
 def root():
     return {"status": "API is running"}
 
-# Qdrant bağlantısı (gerekirse host ve port değiştir)
-
+# Qdrant bağlantısı
 client = QdrantClient(
     url="https://ae6673f5-67e3-4089-8007-9352def14318.eu-central-1-0.aws.cloud.qdrant.io:6333",
     api_key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.DL5R4Jn0WQ4fqAgoSS-mJcziw1VBblz5H56gNLX8j-Q"
 )
 
-
-# İstek JSON modeli
-class CategoryRequest(BaseModel):
-    platform: str
-    category_id: int
-
-@app.post("/api/category_recommend")
-def category_recommend(request: CategoryRequest):
+# Kategori öneri endpoint'i
+@app.get("/api/category_recommend")
+def category_recommend(platform: str, category_id: int):
+    # İstenen platform ve category_id'den vektör çek
     scroll_result = client.scroll(
         collection_name="category_embeddings",
         scroll_filter=Filter(
             must=[
-                FieldCondition(key="platform", match=MatchValue(value=request.platform)),
-                FieldCondition(key="category_id", match=MatchValue(value=request.category_id))
+                FieldCondition(key="platform", match=MatchValue(value=platform)),
+                FieldCondition(key="category_id", match=MatchValue(value=category_id))
             ]
         ),
         limit=1,
@@ -53,6 +47,7 @@ def category_recommend(request: CategoryRequest):
 
     query_vector = scroll_result[0][0].vector
 
+    # Top 20 benzer sonucu getir
     responses = client.search_batch(
         collection_name="category_embeddings",
         requests=[
@@ -64,27 +59,26 @@ def category_recommend(request: CategoryRequest):
         ]
     )
 
-    grouped_results = defaultdict(list)
+    # En iyi eşleşmeleri tutmak için
+    best_matches = {}
 
     for r in responses[0]:
-        
-        grouped_results[r.payload['platform']].append({
-            "platform": r.payload['platform'],
-            "id": r.payload.get('category_id'),
-            "hierarchy": r.payload.get('hierarchy')
-        })
+        other_platform = r.payload.get('platform')
+        #similarity = round(1 - r.score, 4)
+        similarity = round(r.score*100, 2)
 
-    
-    #output = []
-    #for plat in ["Hepsiburada", "Trendyol", "N11"]:
-        #output.extend(grouped_results.get(plat, []))
+        # Aynı platformdan gelenleri atla
+        if other_platform == platform:
+            continue
 
-    #return output
-     # Bu iki satırı eski kodun yerine yapıştır:
-    other_platforms = [p for p in ["Hepsiburada", "Trendyol", "N11"] if p != request.platform]
+        # Her diğer platformdan sadece en iyi eşleşme
+        if (other_platform not in best_matches) or (similarity > best_matches[other_platform]['score']):
+            best_matches[other_platform] = {
+                "platform": other_platform,
+                "id": r.payload.get("category_id"),
+                "hierarchy": r.payload.get("hierarchy"),
+                "score": similarity
+            }
 
-    output = []
-    for plat in other_platforms:
-        output.extend(grouped_results.get(plat, []))
-
-    return output  
+    # Sonuçları liste halinde döndür
+    return list(best_matches.values())
